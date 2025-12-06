@@ -1,0 +1,190 @@
+# `model-explorer`
+
+An interactive terminal-based explorer for [`safetensors`](https://huggingface.co/docs/safetensors) and [GGUF](https://huggingface.co/docs/hub/gguf) files, designed to help you visualize and navigate the structure of machine learning models.
+
+> **Note**: This is a Python port of the original [safetensors_explorer](https://github.com/EricLBuehler/safetensors_explorer).
+
+![Demo](demo.gif)
+
+## Features
+
+- 🔍 **Interactive browsing** of `safetensors` and GGUF file structures
+- 📁 **Hierarchical tree view** with expandable/collapsible groups
+- 🔎 **Fuzzy search** - instantly filter tensors with fuzzy matching using `/` key
+- 🔢 **Smart numeric sorting** for layer numbers (e.g., layer.0, layer.1, layer.2, ..., layer.10)
+- 📊 **Tensor details** including shape, data type, and size
+- 🔗 **Multi-file support** - automatically merges multiple files into a unified view
+- 📂 **Directory support** - explore entire model directories with automatic `safetensors` index detection
+- 🌟 **Glob pattern support** - use wildcards to select multiple files (e.g., `*.safetensors`, `model-*.gguf`)
+- 📏 **Human-readable sizes** (B, KB, MB, GB)
+- ⌨️ **Keyboard navigation** for smooth exploration
+- 🧠 **GGUF support** - view GGML format tensors with quantization types
+
+## Installation
+
+### Prerequisites
+- Python 3.8 or later
+
+### Installation from source
+
+```bash
+git clone https://github.com/dimon777/model_explorer
+cd model_explorer
+pip install -e src
+```
+
+## Usage
+
+### Basic usage
+```bash
+# Explore a single safetensors file
+model-explorer model.safetensors
+
+# Explore a GGUF file
+model-explorer model.gguf
+```
+
+### Directory exploration
+```bash
+# Explore all safetensors and GGUF files in a directory
+model-explorer /path/to/model/directory
+
+# The tool automatically detects and uses model.safetensors.index.json if present
+model-explorer /path/to/huggingface/model
+```
+
+### Multi-file exploration
+```bash
+# Explore multiple files as a unified model
+model-explorer model-00001-of-00003.safetensors model-00002-of-00003.safetensors model-00003-of-00003.safetensors
+
+# Mix safetensors and GGUF files
+model-explorer model.safetensors model.gguf
+
+# Mix files and directories
+model-explorer model.safetensors /path/to/additional/models
+```
+
+### Glob pattern support
+```bash
+# Use wildcards to select multiple files
+model-explorer *.safetensors
+
+# Match files with specific patterns
+model-explorer model-*.gguf
+
+# Match numbered checkpoint files
+model-explorer checkpoint-[0-9]*.safetensors
+
+# Combine multiple patterns
+model-explorer *.safetensors *.gguf
+
+# Mix glob patterns with explicit paths
+model-explorer model.safetensors checkpoint-*.safetensors
+```
+
+### Keyboard Controls
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate up/down through the tree |
+| `Enter` / `Space` | Expand/collapse groups, view tensor details |
+| `/` | Enter search mode to filter tensors |
+| `Esc` | Exit search mode |
+| `q` | Quit the application (or exit search mode if active) |
+| `Ctrl+C` | Force quit |
+
+### Search Feature
+
+Press `/` to enter search mode and start typing to filter tensors by name. The search:
+- Uses **fuzzy matching** - find tensors even with typos or partial matches (e.g., "attnproj" will match "attn.c_proj.weight")
+- Searches **all tensors** - not just visible ones, regardless of collapsed groups
+- Shows results in a **flat list** with full tensor names
+- Sorts by **relevance** - best matches appear first
+
+Press `Enter` or `Esc` to exit search mode and return to the full tree view.
+
+### Visualization
+
+You can visualize the model structure as an interactive sunburst chart in your browser:
+
+```bash
+# Visualize a single file
+model-explorer --visualize model.safetensors
+
+# Visualize a directory
+model-explorer -v /path/to/model
+```
+
+The visualization shows:
+- **Size (Area)**: The relative size of each tensor/layer in bytes.
+- **Color**: Indicates tensor count (lighter colors = more tensors).
+- **Metadata**: Displayed as small grey nodes.
+
+## Example Output
+
+```
+SafeTensors Explorer - model.safetensors (1/1)
+Use ↑/↓ to navigate, Enter/Space to expand/collapse, q to quit
+================================================================================
+
+▼ 📁 transformer (123 tensors, 1.2 GB)
+  ▼ 📁 h (120 tensors, 1.1 GB)
+    ▼ 📁 0 (5 tensors, 45.2 MB)
+      📄 attn.c_attn.weight [Float16, (4096, 3072), 25.2 MB]
+      📄 attn.c_proj.weight [Float16, (1024, 4096), 8.4 MB]
+      📄 ln_1.weight [Float16, (4096,), 8.2 KB]
+      📄 mlp.c_fc.weight [Float16, (4096, 11008), 90.1 MB]
+      📄 mlp.c_proj.weight [Float16, (11008, 4096), 90.1 MB]
+    ▶ 📁 1 (5 tensors, 45.2 MB)
+    ▶ 📁 2 (5 tensors, 45.2 MB)
+    ...
+    ▶ 📁 31 (5 tensors, 45.2 MB)
+  📄 ln_f.weight [Float16, (4096,), 8.2 KB]
+  📄 wte.weight [Float16, (151936, 4096), 1.2 GB]
+
+Selected: 1/342 | Scroll: 0
+```
+
+## How It Works
+
+1. **Path Resolution**: Automatically discovers `safetensors` files from files, directories, or `safetensors` index files
+2. **File Loading**: Loads one or more `safetensors` files and extracts tensor metadata
+3. **Tree Building**: Organizes tensors into a hierarchical structure based on their names (split by '.')
+4. **Smart Sorting**: Uses natural sorting to handle numeric components correctly
+5. **Interactive Display**: Renders the tree with expansion/collapse functionality
+6. **Tensor Details**: Shows detailed information when selecting individual tensors
+
+## Technical Details
+
+### Supported Formats
+- `safetensors` files (`.safetensors`)
+- GGUF files (`.gguf`) with GGML tensor types including quantized formats
+- `safetensors` index files (`model.safetensors.index.json`)
+- Directory scanning with recursive search option
+- All tensor data types supported by the `safetensors` and GGML formats
+
+### Performance
+- Memory efficient: Only loads tensor metadata, not the actual tensor data
+- Fast startup: Optimized for quick exploration of large models
+- Responsive UI: Smooth navigation even with thousands of tensors
+
+## Dependencies
+
+- `textual` - For the terminal user interface (TUI)
+- `safetensors` - For reading `safetensors` files
+- `gguf` - For reading GGUF files
+- `thefuzz` & `python-levenshtein` - For fuzzy search
+- `torch` - Required for `safetensors` PyTorch support
+
+## Testing
+
+To run the unit tests:
+
+```bash
+python3 -m unittest discover tests
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
