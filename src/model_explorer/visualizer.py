@@ -7,6 +7,80 @@ from pathlib import Path
 from .loader import ModelLoader
 from .utils import format_size
 
+# Color definitions
+COLORS = {
+    "ENTRY": "#BBDEFB",      # Light Blue
+    "BLOCK_START": "#E1BEE7", # Light Purple
+    "ATTN_QKV": "#FFCDD2",    # Light Red
+    "ATTN_OUT": "#C62828",    # Dark Red
+    "MID_BLOCK": "#db92e8",   # Medium Purple
+    "MLP_GATE_UP": "#C8E6C9", # Light Green
+    "MLP_DOWN": "#2E7D32",    # Dark Green
+    "EXIT_NORM": "#9C27B0",   # Dark Purple
+    "EXIT_HEAD": "#1565C0",   # Dark Blue
+    "DEFAULT": "#EEEEEE",     # Grey for groups/unknown
+}
+
+# Legend descriptions
+LEGEND_INFO = [
+    ("ENTRY", COLORS["ENTRY"], "Input / Embeddings"),
+    ("BLOCK START", COLORS["BLOCK_START"], "Norm (Pre-Attn)"),
+    ("MID-BLOCK", COLORS["MID_BLOCK"], "Norm (Pre-FFN)"),
+    ("EXIT NORM", COLORS["EXIT_NORM"], "Final Norm"),
+    ("ATTENTION", COLORS["ATTN_QKV"], "Query / Key / Value"),
+    ("ATTENTION OUT", COLORS["ATTN_OUT"], "Attention Output"),
+    ("MLP (FFN)", COLORS["MLP_GATE_UP"], "Gate / Up Projection"),
+    ("MLP DOWN", COLORS["MLP_DOWN"], "Down Projection"),
+    ("EXIT HEAD", COLORS["EXIT_HEAD"], "Output Head"),
+    ("GROUP", COLORS["DEFAULT"], "Layer Group / Other"),
+]
+
+def get_layer_color(name: str) -> str:
+    """
+    Determines the color of a layer based on its name using GGUF and Safetensors patterns.
+    """
+    n = name.lower()
+    
+    # ENTRY
+    if "token_embd.weight" in n or "embed_tokens.weight" in n:
+        return COLORS["ENTRY"]
+        
+    # BLOCK START (Norm)
+    if "attn_norm.weight" in n or "input_layernorm.weight" in n:
+        return COLORS["BLOCK_START"]
+        
+    # ATTENTION (Q/K/V)
+    if any(x in n for x in ["attn_q.weight", "attn_k.weight", "attn_v.weight", 
+                           "self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"]):
+        return COLORS["ATTN_QKV"]
+        
+    # ATTENTION (Out)
+    if "attn_output.weight" in n or "self_attn.o_proj.weight" in n:
+        return COLORS["ATTN_OUT"]
+        
+    # MID-BLOCK (Norm)
+    if "ffn_norm.weight" in n or "post_attention_layernorm.weight" in n:
+        return COLORS["MID_BLOCK"]
+        
+    # MLP (Gate/Up)
+    if any(x in n for x in ["ffn_gate.weight", "ffn_up.weight", 
+                           "mlp.gate_proj.weight", "mlp.up_proj.weight"]):
+        return COLORS["MLP_GATE_UP"]
+        
+    # MLP (Down)
+    if "ffn_down.weight" in n or "mlp.down_proj.weight" in n:
+        return COLORS["MLP_DOWN"]
+        
+    # EXIT (Norm)
+    if "output_norm.weight" in n or "model.norm.weight" in n:
+        return COLORS["EXIT_NORM"]
+        
+    # EXIT (Head)
+    if "output.weight" in n or "lm_head.weight" in n:
+        return COLORS["EXIT_HEAD"]
+        
+    return COLORS["DEFAULT"]
+
 def visualize_model(files: List[Path]):
     """
     Visualizes the model structure as an interactive sunburst chart with metadata inset.
@@ -23,50 +97,33 @@ def visualize_model(files: List[Path]):
     print(f"Found {total_tensors} tensors. Preparing visualization...")
     
     # 1. Calculate tensor counts for every node in the hierarchy
-    # Map: node_id -> tensor_count
     node_counts: Dict[str, int] = {}
-    
-    # Initialize root
     node_counts["root"] = 0
     
-    # Set of all unique node IDs to ensure we create them later
     all_node_ids = {"root"}
     
     for tensor in loader.tensors:
         parts = tensor.name.split(".")
-        
-        # Walk down the path, creating/updating counts for each node
         current_path = "root"
-        
-        # Increment root count for every tensor
         node_counts["root"] += 1
         
         for part in parts:
             node_id = f"{current_path}.{part}"
             all_node_ids.add(node_id)
-            
-            # Increment count for this node
             node_counts[node_id] = node_counts.get(node_id, 0) + 1
-            
             current_path = node_id
 
     # 2. Prepare data for DataFrame
     data = []
-    
-    # Helper to track created groups for the DataFrame loop
-    # (We iterate tensors again to build the structure, but we could also iterate all_node_ids if we reconstructed the tree)
-    # To keep the structure clean and ordered, we'll iterate tensors and create nodes as we encounter them,
-    # but use the pre-calculated counts.
     created_groups = set()
     
     # Add root node explicitly
     data.append({
         "id": "root",
         "parent": "",
-        "name": "Model",
+        "name": f"Model ({node_counts['root']})",
         "value": 0,
-        "color_val": node_counts["root"] / total_tensors if total_tensors > 0 else 0,
-        "tensor_count": node_counts["root"],
+        "color": COLORS["DEFAULT"],
         "is_tensor": False
     })
     created_groups.add("root")
@@ -82,31 +139,32 @@ def visualize_model(files: List[Path]):
             if node_id not in created_groups:
                 is_leaf = (i == len(parts) - 1)
                 count = node_counts[node_id]
-                normalized_count = count / total_tensors if total_tensors > 0 else 0
+                display_name = f"{part} ({count})"
                 
                 if is_leaf:
                     size_fmt = format_size(tensor.size_bytes)
+                    # Determine color based on full tensor name
+                    color = get_layer_color(tensor.name)
+                    
                     data.append({
                         "id": node_id,
                         "parent": parent_id,
-                        "name": part,
+                        "name": display_name,
                         "value": tensor.size_bytes,
-                        "color_val": normalized_count,
-                        "tensor_count": count,
+                        "color": color,
                         "is_tensor": True,
-                        "hover_text": f"{tensor.name}<br>Shape: {tensor.shape}<br>Type: {tensor.dtype}<br>Size: {size_fmt}<br>Count: {count} ({(normalized_count*100):.1f}%)"
+                        "hover_text": f"{tensor.name}<br>Shape: {tensor.shape}<br>Type: {tensor.dtype}<br>Size: {size_fmt}"
                     })
                 else:
-                    # Group node
+                    # Group node - use default grey
                     data.append({
                         "id": node_id,
                         "parent": parent_id,
-                        "name": part,
-                        "value": 0, # Aggregated by plotly
-                        "color_val": normalized_count,
-                        "tensor_count": count,
+                        "name": display_name,
+                        "value": 0,
+                        "color": COLORS["DEFAULT"],
                         "is_tensor": False,
-                        "hover_text": f"Group: {part}<br>Tensors: {count} ({(normalized_count*100):.1f}%)"
+                        "hover_text": f"Group: {part}<br>Tensors: {count}"
                     })
                 created_groups.add(node_id)
             
@@ -121,19 +179,26 @@ def visualize_model(files: List[Path]):
         parents='parent',
         ids='id',
         values='value',
-        color='color_val',
-        color_continuous_scale='Blues', # Light blue to Dark blue
-        range_color=[0, 1], # Normalize 0 to 1
         hover_name='name',
-        hover_data={'hover_text': True, 'value': False, 'color_val': False, 'id': False, 'parent': False, 'name': False, 'tensor_count': False},
+        hover_data={'hover_text': True, 'value': False, 'id': False, 'parent': False, 'name': False, 'color': False},
     )
     
+    # Apply colors manually since we have specific hex codes per node
+    sunburst_fig.update_traces(marker=dict(colors=df['color']))
+    
     # Create main figure with subplots
+    # 2 rows, 2 columns. 
+    # Left column (Sunburst) spans both rows.
+    # Right column: Row 1 = Metadata, Row 2 = Legend
     fig = make_subplots(
-        rows=1, cols=2,
+        rows=2, cols=2,
         column_widths=[0.7, 0.3],
-        specs=[[{"type": "domain"}, {"type": "table"}]],
-        subplot_titles=("Model Structure", "Metadata")
+        row_heights=[0.5, 0.5],
+        specs=[
+            [{"type": "domain", "rowspan": 2}, {"type": "table"}],
+            [None, {"type": "table"}]
+        ],
+        subplot_titles=("Model Structure", "Metadata", "Legend")
     )
     
     # Add Sunburst trace
@@ -173,16 +238,33 @@ def visualize_model(files: List[Path]):
             row=1, col=2
         )
 
+    # Add Legend Table trace
+    legend_names = [x[0] for x in LEGEND_INFO]
+    legend_colors = [x[1] for x in LEGEND_INFO]
+    legend_desc = [x[2] for x in LEGEND_INFO]
+    
+    fig.add_trace(
+        go.Table(
+            header=dict(
+                values=["Category", "Meaning"],
+                font=dict(size=12, color="white"),
+                align="left",
+                fill_color="#444"
+            ),
+            cells=dict(
+                values=[legend_names, legend_desc],
+                align="left",
+                font=dict(size=11),
+                fill_color=[legend_colors, "#F5F5F5"] # Color the Category column
+            )
+        ),
+        row=2, col=2
+    )
+
     # Update layout
     fig.update_layout(
         title_text=f"Model Structure Visualization ({total_tensors} tensors)",
         margin=dict(t=60, l=10, r=10, b=10),
-        coloraxis=sunburst_fig.layout.coloraxis,
-        coloraxis_colorbar=dict(
-            title="Tensor Count Fraction", 
-            x=0.65,
-            tickformat=".0%"
-        ),
     )
 
     print("Opening visualization in browser...")
