@@ -1,6 +1,6 @@
 # `model-explorer`
 
-An interactive terminal-based explorer for [`safetensors`](https://huggingface.co/docs/safetensors) and [GGUF](https://huggingface.co/docs/hub/gguf) files, designed to help you visualize and navigate the structure of machine learning models.
+An interactive terminal and browser-based explorer for [`safetensors`](https://huggingface.co/docs/safetensors) and [GGUF](https://huggingface.co/docs/hub/gguf) files, designed to help you visualize and navigate the structure of machine learning models.
 
 > **Note**: This is a Python port of the original [safetensors_explorer](https://github.com/EricLBuehler/safetensors_explorer).
 
