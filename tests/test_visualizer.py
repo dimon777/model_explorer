@@ -76,7 +76,7 @@ class TestVisualizer(unittest.TestCase):
         mock_main_fig = MagicMock()
         mock_subplots.return_value = mock_main_fig
         
-        visualize_model([self.safetensors_path])
+        visualize_model([self.safetensors_path], ["test_viz.safetensors"])
         
         # Verify calls
         self.assertTrue(mock_df.called)
@@ -91,6 +91,12 @@ class TestVisualizer(unittest.TestCase):
         # Verify traces added: Sunburst, Metadata, Legend
         self.assertTrue(mock_main_fig.add_trace.called)
         self.assertEqual(mock_main_fig.add_trace.call_count, 3)
+        
+        # Verify layout update with title
+        self.assertTrue(mock_main_fig.update_layout.called)
+        _, layout_kwargs = mock_main_fig.update_layout.call_args
+        self.assertIn("title_text", layout_kwargs)
+        self.assertIn("test_viz.safetensors", layout_kwargs["title_text"])
 
 if __name__ == '__main__':
     unittest.main()

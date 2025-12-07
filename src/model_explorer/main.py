@@ -82,7 +82,7 @@ def main():
         
     if args.visualize:
         from .visualizer import visualize_model
-        visualize_model(files)
+        visualize_model(files, args.paths)
     else:
         app = SafetensorsExplorerApp(files)
         app.run()

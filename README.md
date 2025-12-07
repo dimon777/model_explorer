@@ -4,7 +4,7 @@ An interactive terminal-based explorer for [`safetensors`](https://huggingface.c
 
 > **Note**: This is a Python port of the original [safetensors_explorer](https://github.com/EricLBuehler/safetensors_explorer).
 
-![Demo](demo.gif)
+![Demo](model_vis.png)
 
 ## Features
 

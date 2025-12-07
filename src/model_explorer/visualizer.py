@@ -81,7 +81,7 @@ def get_layer_color(name: str) -> str:
         
     return COLORS["DEFAULT"]
 
-def visualize_model(files: List[Path]):
+def visualize_model(files: List[Path], input_paths: List[str] = None):
     """
     Visualizes the model structure as an interactive sunburst chart with metadata inset.
     """
@@ -95,6 +95,14 @@ def visualize_model(files: List[Path]):
 
     total_tensors = len(loader.tensors)
     print(f"Found {total_tensors} tensors. Preparing visualization...")
+
+    # ... (rest of the function)
+
+    # Construct title
+    path_str = " ".join(input_paths) if input_paths else "Model"
+    title = f"Model Structure<br>{path_str} ({total_tensors} tensors)"
+
+
     
     # 1. Calculate tensor counts for every node in the hierarchy
     node_counts: Dict[str, int] = {}
@@ -198,7 +206,7 @@ def visualize_model(files: List[Path]):
             [{"type": "domain", "rowspan": 2}, {"type": "table"}],
             [None, {"type": "table"}]
         ],
-        subplot_titles=("Model Structure", "Metadata", "Legend")
+        subplot_titles=(title, "Metadata", "Legend")
     )
     
     # Add Sunburst trace
@@ -263,7 +271,7 @@ def visualize_model(files: List[Path]):
 
     # Update layout
     fig.update_layout(
-        title_text=f"Model Structure Visualization ({total_tensors} tensors)",
+        title_text="", #title,
         margin=dict(t=60, l=10, r=10, b=10),
     )
 
