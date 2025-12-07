@@ -10,7 +10,7 @@ An interactive terminal-based explorer for [`safetensors`](https://huggingface.c
 
 - 🔍 **Interactive browsing** of `safetensors` and GGUF file structures
 - 📁 **Hierarchical tree view** with expandable/collapsible groups
-- 📊 **Interactive sunburst visualization** to explore model structure in a browser
+- 📊 **Interactive sunburst visualization** to explore model structure in a browser (please note visualizing large models will be slow due to hundreds of thousand of tensors)
 - 🔎 **Fuzzy search** - instantly filter tensors with fuzzy matching using `/` key
 - 🔢 **Smart numeric sorting** for layer numbers (e.g., layer.0, layer.1, layer.2, ..., layer.10)
 - 📊 **Tensor details** including shape, data type, and size
