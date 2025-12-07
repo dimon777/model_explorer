@@ -10,6 +10,7 @@ An interactive terminal-based explorer for [`safetensors`](https://huggingface.c
 
 - 🔍 **Interactive browsing** of `safetensors` and GGUF file structures
 - 📁 **Hierarchical tree view** with expandable/collapsible groups
+- 📊 **Interactive sunburst visualization** to explore model structure in a browser
 - 🔎 **Fuzzy search** - instantly filter tensors with fuzzy matching using `/` key
 - 🔢 **Smart numeric sorting** for layer numbers (e.g., layer.0, layer.1, layer.2, ..., layer.10)
 - 📊 **Tensor details** including shape, data type, and size
@@ -118,7 +119,7 @@ model-explorer -v /path/to/model
 
 The visualization shows:
 - **Size (Area)**: The relative size of each tensor/layer in bytes.
-- **Color**: Indicates tensor count (lighter colors = more tensors).
+- **Color**: Indicates type of the tensor/layer (see legend).
 - **Metadata**: Displayed as small grey nodes.
 
 ## Example Output
