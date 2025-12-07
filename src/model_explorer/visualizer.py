@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from typing import List
+from typing import List, Dict
 from pathlib import Path
 from .loader import ModelLoader
 from .utils import format_size
@@ -19,38 +19,71 @@ def visualize_model(files: List[Path]):
         print("No tensors found to visualize.")
         return
 
-    print(f"Found {len(loader.tensors)} tensors. Preparing visualization...")
+    total_tensors = len(loader.tensors)
+    print(f"Found {total_tensors} tensors. Preparing visualization...")
     
-    # Prepare data for Sunburst DataFrame
+    # 1. Calculate tensor counts for every node in the hierarchy
+    # Map: node_id -> tensor_count
+    node_counts: Dict[str, int] = {}
+    
+    # Initialize root
+    node_counts["root"] = 0
+    
+    # Set of all unique node IDs to ensure we create them later
+    all_node_ids = {"root"}
+    
+    for tensor in loader.tensors:
+        parts = tensor.name.split(".")
+        
+        # Walk down the path, creating/updating counts for each node
+        current_path = "root"
+        
+        # Increment root count for every tensor
+        node_counts["root"] += 1
+        
+        for part in parts:
+            node_id = f"{current_path}.{part}"
+            all_node_ids.add(node_id)
+            
+            # Increment count for this node
+            node_counts[node_id] = node_counts.get(node_id, 0) + 1
+            
+            current_path = node_id
+
+    # 2. Prepare data for DataFrame
     data = []
     
-    # Add root node
+    # Helper to track created groups for the DataFrame loop
+    # (We iterate tensors again to build the structure, but we could also iterate all_node_ids if we reconstructed the tree)
+    # To keep the structure clean and ordered, we'll iterate tensors and create nodes as we encounter them,
+    # but use the pre-calculated counts.
+    created_groups = set()
+    
+    # Add root node explicitly
     data.append({
         "id": "root",
         "parent": "",
         "name": "Model",
         "value": 0,
-        "color_val": 0,
+        "color_val": node_counts["root"] / total_tensors if total_tensors > 0 else 0,
+        "tensor_count": node_counts["root"],
         "is_tensor": False
     })
+    created_groups.add("root")
     
-    # Helper to track created groups
-    created_groups = {"root"}
-    
-    # Process tensors
     for tensor in loader.tensors:
         parts = tensor.name.split(".")
-        
-        # Create hierarchy
         current_path = "root"
+        
         for i, part in enumerate(parts):
             node_id = f"{current_path}.{part}"
             parent_id = current_path
             
             if node_id not in created_groups:
                 is_leaf = (i == len(parts) - 1)
+                count = node_counts[node_id]
+                normalized_count = count / total_tensors if total_tensors > 0 else 0
                 
-                # Leaf node (Tensor)
                 if is_leaf:
                     size_fmt = format_size(tensor.size_bytes)
                     data.append({
@@ -58,9 +91,10 @@ def visualize_model(files: List[Path]):
                         "parent": parent_id,
                         "name": part,
                         "value": tensor.size_bytes,
-                        "color_val": 1, # Count as 1 tensor
+                        "color_val": normalized_count,
+                        "tensor_count": count,
                         "is_tensor": True,
-                        "hover_text": f"{tensor.name}<br>Shape: {tensor.shape}<br>Type: {tensor.dtype}<br>Size: {size_fmt}"
+                        "hover_text": f"{tensor.name}<br>Shape: {tensor.shape}<br>Type: {tensor.dtype}<br>Size: {size_fmt}<br>Count: {count} ({(normalized_count*100):.1f}%)"
                     })
                 else:
                     # Group node
@@ -68,10 +102,11 @@ def visualize_model(files: List[Path]):
                         "id": node_id,
                         "parent": parent_id,
                         "name": part,
-                        "value": 0, # Will be aggregated by plotly
-                        "color_val": 0,
+                        "value": 0, # Aggregated by plotly
+                        "color_val": normalized_count,
+                        "tensor_count": count,
                         "is_tensor": False,
-                        "hover_text": f"Group: {part}"
+                        "hover_text": f"Group: {part}<br>Tensors: {count} ({(normalized_count*100):.1f}%)"
                     })
                 created_groups.add(node_id)
             
@@ -87,13 +122,13 @@ def visualize_model(files: List[Path]):
         ids='id',
         values='value',
         color='color_val',
-        color_continuous_scale='Viridis',
+        color_continuous_scale='Blues', # Light blue to Dark blue
+        range_color=[0, 1], # Normalize 0 to 1
         hover_name='name',
-        hover_data={'hover_text': True, 'value': False, 'color_val': False, 'id': False, 'parent': False, 'name': False},
+        hover_data={'hover_text': True, 'value': False, 'color_val': False, 'id': False, 'parent': False, 'name': False, 'tensor_count': False},
     )
     
     # Create main figure with subplots
-    # 1 row, 2 columns. Left: Sunburst (larger), Right: Metadata Table (smaller)
     fig = make_subplots(
         rows=1, cols=2,
         column_widths=[0.7, 0.3],
@@ -102,9 +137,7 @@ def visualize_model(files: List[Path]):
     )
     
     # Add Sunburst trace
-    # We extract the trace from the px figure and add it to the subplot
     for trace in sunburst_fig.data:
-        # Update trace to use custom hovertemplate
         trace.hovertemplate = "<b>%{label}</b><br>%{customdata[0]}<extra></extra>"
         trace.textinfo = "label+percent entry"
         fig.add_trace(trace, row=1, col=1)
@@ -113,7 +146,6 @@ def visualize_model(files: List[Path]):
     if loader.metadata:
         meta_names = [m.name for m in loader.metadata]
         meta_values = [m.value for m in loader.metadata]
-        meta_types = [m.value_type for m in loader.metadata]
         
         fig.add_trace(
             go.Table(
@@ -133,7 +165,6 @@ def visualize_model(files: List[Path]):
             row=1, col=2
         )
     else:
-        # Add empty table or text if no metadata
         fig.add_trace(
             go.Table(
                 header=dict(values=["No Metadata"]),
@@ -144,10 +175,14 @@ def visualize_model(files: List[Path]):
 
     # Update layout
     fig.update_layout(
-        title_text=f"Model Structure Visualization ({len(loader.tensors)} tensors)",
+        title_text=f"Model Structure Visualization ({total_tensors} tensors)",
         margin=dict(t=60, l=10, r=10, b=10),
-        coloraxis=sunburst_fig.layout.coloraxis, # Copy coloraxis from px figure
-        coloraxis_colorbar=dict(title="Tensor Count", x=0.65), # Position colorbar between plots
+        coloraxis=sunburst_fig.layout.coloraxis,
+        coloraxis_colorbar=dict(
+            title="Tensor Count Fraction", 
+            x=0.65,
+            tickformat=".0%"
+        ),
     )
 
     print("Opening visualization in browser...")
